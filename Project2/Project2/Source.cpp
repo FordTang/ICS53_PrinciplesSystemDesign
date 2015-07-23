@@ -14,59 +14,58 @@
 #include <unistd.h>
 using namespace std;
 
-
 struct vehicle
 {
 	int id;
 	int direc;
 };
 
-
 ifstream ifile;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int cars_on_bridge=0;
 int current_dir=0;
 
-
-void ArriveBridge(int id,int direct)
-{	
-	pthread_mutex_lock(&mutex);
+bool ArriveBridge(int id,int direct)
+{
 	cout<<"Car "<<id<<" arrives traveling direction "<<direct<<endl;
+	pthread_mutex_lock( &mutex );
 	//cout << "Cars on bridge: " << cars_on_bridge << endl;
-	if (cars_on_bridge == 0 && current_dir != direct)
+	if( cars_on_bridge==3 || (direct!=current_dir && cars_on_bridge>0))
 	{
-		current_dir = direct;
-		cout<<"Traffic Direction is being changed to "<< direct <<endl;
-	}
-	if (cars_on_bridge==3 || direct!=current_dir)
 		cout<<"Car "<<id<<" waits to travel in direction "<<direct<<endl;
-	while (cars_on_bridge>=3 || direct!=current_dir)
-	{
-		pthread_cond_wait(&cond, &mutex);
-		if (cars_on_bridge == 0 && current_dir != direct)
-		{
-			cout<<"Traffic Direction is being changed to "<< direct <<endl;
-			current_dir = direct;
-		}
 	}
-	pthread_mutex_unlock(&mutex);	
+	pthread_mutex_unlock( &mutex );
+	while (true)
+	{
+		pthread_mutex_lock( &mutex );
+		if (cars_on_bridge<3)
+		{
+			if (current_dir==direct)
+			{
+				cars_on_bridge++;
+				pthread_mutex_unlock( &mutex );
+				sleep(1);
+				return true;
+			}
+			else if(current_dir!=direct && cars_on_bridge==0)
+			{
+				cars_on_bridge++;
+				current_dir=direct;
+				pthread_mutex_unlock( &mutex );
+				sleep(1);
+				return true;
+			}
+		}
+		pthread_mutex_unlock( &mutex );
+	}
 }
-
-
 void CrossBridge(int id,int direct)
 {
-	pthread_mutex_lock(&mutex);
 	cout<<"Car "<<id<<" crossing bridge in direction "<<direct<<endl;
-	cars_on_bridge++;
-	pthread_mutex_unlock(&mutex);
-	sleep(2);	
 }
-
-
 void ExitBridge(int id,int direct)
 {
-	pthread_mutex_lock(&mutex);
+	pthread_mutex_lock( &mutex );
 	cars_on_bridge--;
 	cout << "Car " << id << " leaves the bridge." << endl;
 	if (cars_on_bridge==0)
@@ -75,16 +74,14 @@ void ExitBridge(int id,int direct)
 		{
 			current_dir=1;
 			cout<<"Traffic Direction is being changed to 1"<<endl;
-			pthread_cond_signal(&cond);
 		}
 		else
 		{
 			current_dir=0;
 			cout<<"Traffic Direction is being changed to 0"<<endl;
-			pthread_cond_signal(&cond);
 		}
 	}
-	pthread_mutex_unlock(&mutex);
+	pthread_mutex_unlock( &mutex );
 }
 
 
@@ -98,7 +95,6 @@ void *OneVehicle( void *ptr )
 	ExitBridge(car->id, car->direc);
 	pthread_exit(0);
 }
-
 
 int main()
 {
